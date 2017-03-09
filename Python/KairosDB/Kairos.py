@@ -36,8 +36,8 @@ def fetch_villo():
 
     print "Bulk gone."
 
-for i in range(0,100):
+for i in range(0,1000):
     print '*'*80
     fetch_villo();
-    time.sleep(30)
+    time.sleep(10)
     print '*'*80
