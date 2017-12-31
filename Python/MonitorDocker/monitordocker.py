@@ -8,7 +8,7 @@ import threading
 from datetime import datetime
 from elasticsearch import Elasticsearch
 
-VERSION="0.4.1"
+VERSION="0.4.3"
 DOCKER_STATS="docker_stats*"            #Index template for container statistics
 DOCKER_EVENTS="docker_events*"          #Index template for events
 ELASTIC_ADDRESS="localhost:9200"        #Elastic host address
@@ -74,22 +74,27 @@ def worker():
     print ('Worker Thread Starting')
     print("*="*20)
     
-    for event in client.events():
-        lock.acquire()
+    while True:
         try:
-            event1 = event.decode('utf-8')
+            for event in client.events():
+                lock.acquire()
+                try:
+                    event1 = event.decode('utf-8')
 
-            for event2 in event1.split("\n"):
-                if "{" in event2:
-                    event_bulk_body += '{ "index" : { "_index" : "%s-%s", "_type" : "event"} }\n' %(DOCKER_EVENTS.replace("*",""),datetime.now().strftime("%Y.%m"))
-                    event3=json.loads(event2)
-                    event3['@timestamp']=int(time.time())*1000
-                    event_bulk_body += json.dumps(event3)+'\n'
+                    for event2 in event1.split("\n"):
+                        if "{" in event2:
+                            event_bulk_body += '{ "index" : { "_index" : "%s-%s", "_type" : "event"} }\n' %(DOCKER_EVENTS.replace("*",""),datetime.now().strftime("%Y.%m"))
+                            event3=json.loads(event2)
+                            event3['@timestamp']=int(time.time())*1000
+                            event_bulk_body += json.dumps(event3)+'\n'
+                except Exception as e:
+                    print("Unable to read events.")
+                    print(e)
+
+                lock.release()
         except Exception as e:
-            print("Unable to read events.")
+            print("Unable to read stats")
             print(e)
-
-        lock.release()
     print("Worker Thread finished.")
     
 event_bulk_body=""
@@ -107,34 +112,39 @@ if __name__ == '__main__':
         bulk_body=""
         newcpuhashtable={}
 
-        for container in client.containers.list(all=True):
-            print ("%s=>%s" %(container.status,container.id ))
-            stats=container.stats(decode=True,stream=False);
+        try:
+            for container in client.containers.list(all=True):
+                print ("%s=>%s" %(container.status,container.id ))
+                stats=container.stats(decode=True,stream=False);
 
-            if(('cpu_stats' in stats) and ('cpu_usage' in stats['cpu_stats'])
-            and ('total_usage' in stats['cpu_stats']['cpu_usage'])):
-                cpuvalue=stats['cpu_stats']['cpu_usage']['total_usage']
-                precpuvalue=stats['precpu_stats']['cpu_usage']['total_usage']
+                if(('cpu_stats' in stats) and ('cpu_usage' in stats['cpu_stats'])
+                and ('total_usage' in stats['cpu_stats']['cpu_usage'])):
+                    cpuvalue=stats['cpu_stats']['cpu_usage']['total_usage']
+                    precpuvalue=stats['precpu_stats']['cpu_usage']['total_usage']
 
-                cpuDelta = cpuvalue -  precpuvalue;
+                    cpuDelta = cpuvalue -  precpuvalue;
 
-                if('system_cpu_usage' in stats['cpu_stats']) and ('system_cpu_usage' in stats['precpu_stats']):
-                    systemvalue=stats['cpu_stats']['system_cpu_usage']
-                    presystemvalue=stats['precpu_stats']['system_cpu_usage']
-                    systemDelta = systemvalue - presystemvalue;
+                    if('system_cpu_usage' in stats['cpu_stats']) and ('system_cpu_usage' in stats['precpu_stats']):
+                        systemvalue=stats['cpu_stats']['system_cpu_usage']
+                        presystemvalue=stats['precpu_stats']['system_cpu_usage']
+                        systemDelta = systemvalue - presystemvalue;
 
-                    if (systemDelta >0):
+                        if (systemDelta >0):
 
-                        RESULT_CPU_USAGE = float(cpuDelta) / float(systemDelta) * 100.0;
+                            RESULT_CPU_USAGE = float(cpuDelta) / float(systemDelta) * 100.0;
 
-                        stats['cpu_percent']=RESULT_CPU_USAGE;
-
+                            stats['cpu_percent']=RESULT_CPU_USAGE;
 
             bulk_body += '{ "index" : { "_index" : "%s-%s", "_type" : "container"} }\n' %(DOCKER_STATS.replace("*",""),datetime.now().strftime("%Y.%m"))
             stats['@timestamp']=int(time.time())*1000
             stats['status']=container.status
             stats['name']=container.name
             bulk_body += json.dumps(stats)+'\n'
+
+        except Exception as e:
+            print("Unable to read container values.")
+            print(e)
+
 
         print ("Bulk ready.")
         lock.acquire()
@@ -143,7 +153,12 @@ if __name__ == '__main__':
         print ("Bulk size: %d bytes" % len(bulk_body))
 
         if(len(bulk_body)>0 ):        
-            es.bulk(body=bulk_body,timeout='1m')
+            try:
+                es.bulk(body=bulk_body,timeout='1m')
+            except Exception as e2:
+                print("Unable to read container values.")
+                print(e2)
+            
         print ("Bulk gone.")
 
         time.sleep(float(POLLING_SPEED))
