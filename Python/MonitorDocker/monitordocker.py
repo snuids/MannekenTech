@@ -8,7 +8,7 @@ import threading
 from datetime import datetime
 from elasticsearch import Elasticsearch
 
-VERSION="0.4.3"
+VERSION="0.4.4"
 DOCKER_STATS="docker_stats*"            #Index template for container statistics
 DOCKER_EVENTS="docker_events*"          #Index template for events
 ELASTIC_ADDRESS="localhost:9200"        #Elastic host address
@@ -135,11 +135,11 @@ if __name__ == '__main__':
 
                             stats['cpu_percent']=RESULT_CPU_USAGE;
 
-            bulk_body += '{ "index" : { "_index" : "%s-%s", "_type" : "container"} }\n' %(DOCKER_STATS.replace("*",""),datetime.now().strftime("%Y.%m"))
-            stats['@timestamp']=int(time.time())*1000
-            stats['status']=container.status
-            stats['name']=container.name
-            bulk_body += json.dumps(stats)+'\n'
+                bulk_body += '{ "index" : { "_index" : "%s-%s", "_type" : "container"} }\n' %(DOCKER_STATS.replace("*",""),datetime.now().strftime("%Y.%m"))
+                stats['@timestamp']=int(time.time())*1000
+                stats['status']=container.status
+                stats['name']=container.name
+                bulk_body += json.dumps(stats)+'\n'
 
         except Exception as e:
             print("Unable to read container values.")
