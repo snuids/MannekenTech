@@ -8,7 +8,7 @@ import threading
 from datetime import datetime
 from elasticsearch import Elasticsearch
 
-VERSION="0.4.4"
+VERSION="0.4.5"
 DOCKER_STATS="docker_stats*"            #Index template for container statistics
 DOCKER_EVENTS="docker_events*"          #Index template for events
 ELASTIC_ADDRESS="localhost:9200"        #Elastic host address
@@ -149,6 +149,7 @@ if __name__ == '__main__':
         print ("Bulk ready.")
         lock.acquire()
         bulk_body+=event_bulk_body
+        event_bulk_body=""
         lock.release()
         print ("Bulk size: %d bytes" % len(bulk_body))
 
